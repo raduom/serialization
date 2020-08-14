@@ -1,7 +1,7 @@
 system-ghc: false
 
 # ghc 8.4.4
-resolver: lts-12.16
+resolver: lts-16.9
 
 # ghc 8.6.1
 #resolver: nightly-2018-10-03
@@ -16,11 +16,12 @@ flags:
      newtime15: true
 
 extra-deps:
-- flat-0.3.4
-- persist-0.1
-- packman-0.5.0
-# - binary-0.8.5.1
-- cereal-0.5.7.0
-- store-0.5.0.1
-- serialise-0.2.1.0
-- datasets-0.2.1
+- git: https://github.com/raduom/dh-core.git
+  commit: 47c10308397983f0defe6424a03db9f8d4c91c04
+  subdirs:
+    - datasets
+- store-0.7.6@sha256:2b850c92e07de3b69daceb6c37fbf7ac0c9ff74dc5df5c582e8c0150d48aea36,8001
+- store-core-0.4.4.3@sha256:50b3ef13ab5f82cccf665bd29edf37f69ef1e94c22802c2c94d0f74ce8808f09,1430
+- streaming-attoparsec-1.0.0.1@sha256:fe9b878072423d3f075534fe8af24722d9ded1a1129e9a6ed5b71c4a29681b39,1146
+- streaming-cassava-0.1.0.1@sha256:2d1dfeb09af62009e88311fe92f44d06dafb5cdd38879b437ea6adb3bc40acfe,1739
+- th-utilities-0.2.4.0@sha256:ba19cd8441aa43dbaed40e9055bb5a7cbd7cf9e154f5253c6bf9293af8b1f96b,1869

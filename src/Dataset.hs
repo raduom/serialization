@@ -1,16 +1,16 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveAnyClass     #-}
 {-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module Dataset(carsData,irisData) where
+import           Codec.Serialise       as CBOR
 import           Control.DeepSeq
-import qualified Data.Binary                as B
-import Codec.Serialise as CBOR
-import qualified Data.Flat                  as F
-import qualified Data.Serialize             as C
-import qualified Data.Persist                as R
-import qualified Data.Store                 as S
-import           Numeric.Datasets           (getDataset)
+import qualified Data.Binary           as B
+import qualified Data.Persist          as R
+import qualified Data.Serialize        as C
+import qualified Data.Store            as S
+import qualified Flat                  as F
+import           Numeric.Datasets      (getDataset)
 -- import           Numeric.Datasets.Abalone   (abalone)
 import           Numeric.Datasets.Car
 import           Numeric.Datasets.Iris

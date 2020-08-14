@@ -24,14 +24,16 @@ library
                  persist,
                  binary,
                  flat,
-                 packman,
                  store
 
 test-suite docs
   default-language:   Haskell2010
   type:               exitcode-stdio-1.0
   main-is:            DocSpec.hs
-  build-depends:      base, doctest>=0.11.2 && <0.17,filemanip>=0.3.6.3 && < 0.3.7
+  build-depends:      base, 
+                      doctest >= 0.11.2 && < 0.17,
+                      filemanip >= 0.3.6.3 && < 0.3.7,
+                      criterion >= 1.4.1.0
   HS-Source-Dirs:     test
   ghc-options:        -O0
 
@@ -57,7 +59,6 @@ benchmark all
                 persist,
                 binary,
                 flat,
-                packman,
                 store,
                 datasets
   hs-source-dirs:      src

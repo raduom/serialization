@@ -1,0 +1,8 @@
+source-repository-package
+  type: git
+  location: git@github.com:raduom/dh-core.git
+  tag: 47c10308397983f0defe6424a03db9f8d4c91c04
+  subdir:
+    datasets 
+
+packages: ./serialization.cabal
