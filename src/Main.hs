@@ -7,29 +7,32 @@
 {-# LANGUAGE LambdaCase                #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE PackageImports            #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TupleSections             #-}
 
 module Main where
 
-import           Codec.Serialise      as CBOR
+import qualified "zlib" Codec.Compression.Zlib as Zlib
+import qualified "pure-zlib" Codec.Compression.Zlib as PureZlib
+import           Codec.Serialise               as CBOR
 import           Control.DeepSeq
 import           Criterion.Types
-import qualified Data.Binary          as B
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Binary                   as B
+import qualified Data.ByteString               as BS
+import qualified Data.ByteString.Lazy          as LBS
 import           Data.List
-import qualified Data.Persist         as R
-import qualified Data.Serialize       as C
-import qualified Data.Store           as S
-import qualified Data.Text            as T
-import qualified Data.Text.Encoding   as T
+import qualified Data.Persist                  as R
+import qualified Data.Serialize                as C
+import qualified Data.Store                    as S
+import qualified Data.Text                     as T
+import qualified Data.Text.Encoding            as T
 import           Data.Typeable
 import           Dataset
-import qualified Flat                 as F
+import qualified Flat                          as F
 import           GHC.Generics
 import           Report
-import           System.Mem           (performMajorGC)
+import           System.Mem                    (performMajorGC)
 
 -- Testing and random data generation
 import           Test.QuickCheck
@@ -174,6 +177,18 @@ data PkgStore =
 data PkgShow =
     PkgShow
 
+data PkgFlatZ =
+    PkgFlatZ
+
+data PkgFlatZP =
+    PkgFlatZP
+
+data PkgCBORZ =
+    PkgCBORZ
+
+data PkgCBORZP =
+    PkgCBORZP
+
 class Serialize lib a where
   serialize :: lib -> a -> IO BS.ByteString
   deserialize :: lib -> BS.ByteString -> IO a
@@ -202,6 +217,18 @@ instance (CBOR.Serialise a, NFData a) => Serialize PkgCBOR a where
   {-# NOINLINE deserialize #-}
   deserialize _ = return . force . CBOR.deserialise . LBS.fromStrict
 
+instance (CBOR.Serialise a, NFData a) => Serialize PkgCBORZ a where
+  {-# NOINLINE serialize #-}
+  serialize _ = return . force . LBS.toStrict . Zlib.compress . CBOR.serialise
+  {-# NOINLINE deserialize #-}
+  deserialize _ = return . force . CBOR.deserialise . Zlib.decompress . LBS.fromStrict
+
+instance (CBOR.Serialise a, NFData a) => Serialize PkgCBORZP a where
+  {-# NOINLINE serialize #-}
+  serialize _ = return . force . LBS.toStrict . Zlib.compress . CBOR.serialise
+  {-# NOINLINE deserialize #-}
+  deserialize _ = return . force . CBOR.deserialise . fromRight . PureZlib.decompress . LBS.fromStrict
+
 instance (S.Store a, NFData a) => Serialize PkgStore a where
   {-# NOINLINE serialize #-}
   serialize _ = return . force . S.encode
@@ -213,6 +240,18 @@ instance (F.Flat a, NFData a) => Serialize PkgFlat a where
   serialize _ = return . force . F.flat
   {-# NOINLINE deserialize #-}
   deserialize _ = return . force . fromRight . F.unflat
+
+instance (F.Flat a, NFData a) => Serialize PkgFlatZ a where
+  {-# NOINLINE serialize #-}
+  serialize _ = return . force . LBS.toStrict . Zlib.compress . LBS.fromStrict . F.flat
+  {-# NOINLINE deserialize #-}
+  deserialize _ = return . force . fromRight . F.unflat . LBS.toStrict . Zlib.decompress . LBS.fromStrict
+
+instance (F.Flat a, NFData a) => Serialize PkgFlatZP a where
+  {-# NOINLINE serialize #-}
+  serialize _ = return . force . LBS.toStrict . Zlib.compress . LBS.fromStrict . F.flat
+  {-# NOINLINE deserialize #-}
+  deserialize _ = return . force . fromRight . F.unflat . LBS.toStrict . fromRight . PureZlib.decompress . LBS.fromStrict
 
 instance (Show a, Read a, NFData a) => Serialize PkgShow a where
     {-# NOINLINE serialize #-}
@@ -239,11 +278,15 @@ pkgs ::
 --   ]
 pkgs =
   [ ("flat", serialize PkgFlat, deserialize PkgFlat)
+  , ("flat-zlib", serialize PkgFlatZ, deserialize PkgFlatZ)
+  , ("flat-pure-zlib", serialize PkgFlatZP, deserialize PkgFlatZP)
   , ("store", serialize PkgStore, deserialize PkgStore)
   , ("binary", serialize PkgBinary, deserialize PkgBinary)
   , ("cereal", serialize PkgCereal, deserialize PkgCereal)
   , ("persist", serialize PkgPersist, deserialize PkgPersist)
   , ("serialise", serialize PkgCBOR, deserialize PkgCBOR)
+  , ("serialise-zlib", serialize PkgCBORZ, deserialize PkgCBORZ)
+  , ("serialise-pure-zlib", serialize PkgCBORZP, deserialize PkgCBORZP)
   ]
 
 prop :: Serialize lib (BinTree Int) => lib -> Property
