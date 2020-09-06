@@ -14,6 +14,7 @@ import           Numeric.Datasets      (getDataset)
 -- import           Numeric.Datasets.Abalone   (abalone)
 import           Numeric.Datasets.Car
 import           Numeric.Datasets.Iris
+import GHC.Generics
 
 instance NFData RelScore
 instance B.Binary RelScore

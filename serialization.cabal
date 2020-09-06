@@ -9,7 +9,7 @@ cabal-version:       >=1.10
 
 library
   default-language: Haskell2010
-  exposed-modules: Dataset,Report
+  exposed-modules: Dataset,Report,Plutus.Flat
   HS-Source-Dirs:     src
   build-depends: base,
                  datasets,
@@ -26,8 +26,10 @@ library
                  flat,
                  store,
                  zlib,
-                 pure-zlib
-
+                 pure-zlib,
+                 plutus-use-cases,
+                 plutus-ledger,
+                 plutus-core
 test-suite docs
   default-language:   Haskell2010
   type:               exitcode-stdio-1.0
@@ -35,7 +37,8 @@ test-suite docs
   build-depends:      base, 
                       doctest >= 0.11.2 && < 0.17,
                       filemanip >= 0.3.6.3 && < 0.3.7,
-                      criterion >= 1.4.1.0
+                      criterion >= 1.4.1.0,
+                      statistics
   HS-Source-Dirs:     test
   ghc-options:        -O0
 
@@ -64,7 +67,10 @@ benchmark all
                 store,
                 datasets,
                 zlib,
-                pure-zlib
+                pure-zlib,
+                plutus-use-cases,
+                plutus-ledger,
+                plutus-core
   hs-source-dirs:      src
   ghc-options:         -Wall -fno-warn-orphans -Wno-name-shadowing -Wno-unused-matches -O2
   --ghc-options:         -Wall -O2 -ddump-simpl -dsuppress-idinfo -ddump-to-file

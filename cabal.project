@@ -5,4 +5,19 @@ source-repository-package
   subdir:
     datasets 
 
+source-repository-package
+  type: git
+  location: git@github.com:input-output-hk/plutus.git
+  tag: 6c5485df589f5eff0976721d5171098be5b2c772
+  subdir:
+    plutus-core
+    plutus-use-cases
+    prettyprinter-configurable
+    plutus-tx-plugin
+    plutus-tx
+    plutus-ledger
+    iots-export
+    plutus-contract
+    playground-common
+
 packages: ./serialization.cabal
