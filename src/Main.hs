@@ -425,3 +425,28 @@ main
 fromRight :: Either a b -> b
 fromRight (Right v) = v
 fromRight (Left _)  = error "Unexpected Left"
+
+pkgs =
+  [ ("flat", serialize PkgFlat, deserialize PkgFlat)
+  , ("flat-zlib", serialize PkgFlatZ, deserialize PkgFlatZ)
+  , ("flat-pure-zlib", serialize PkgFlatZP, deserialize PkgFlatZP)
+  , ("store", serialize PkgStore, deserialize PkgStore)
+  , ("binary", serialize PkgBinary, deserialize PkgBinary)
+  , ("cereal", serialize PkgCereal, deserialize PkgCereal)
+  , ("persist", serialize PkgPersist, deserialize PkgPersist)
+  , ("serialise", serialize PkgCBOR, deserialize PkgCBOR)
+  , ("serialise-zlib", serialize PkgCBORZ, deserialize PkgCBORZ)
+  , ("serialise-pure-zlib", serialize PkgCBORZP, deserialize PkgCBORZP)
+  ]
+
+benchPlutus ::
+    ( Eq a
+    , NFData a
+    , F.Flat a
+    , Serialise a 
+    )
+  => (String, a)
+  -> [Benchmark]
+benchPlutus (name , contract) =
+  undefined
+

@@ -2,9 +2,14 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+
 module Dataset(carsData,irisData) where
 import           Codec.Serialise       as CBOR
 import           Control.DeepSeq
+import Data.Bifunctor (second)
 import qualified Data.Binary           as B
 import qualified Data.Persist          as R
 import qualified Data.Serialize        as C
@@ -15,6 +20,26 @@ import           Numeric.Datasets      (getDataset)
 import           Numeric.Datasets.Car
 import           Numeric.Datasets.Iris
 import GHC.Generics
+
+import qualified Language.PlutusTx.Coordination.Contracts.Game as Game
+import qualified Language.PlutusTx.Coordination.Contracts.Crowdfunding as Crowdfunding
+import qualified Language.PlutusTx.Coordination.Contracts.PingPong as PingPong
+import qualified Language.PlutusTx.Coordination.Contracts.Vesting as Vesting
+import qualified Language.PlutusTx.Coordination.Contracts.Future as Future
+import qualified Language.PlutusTx.Coordination.Contracts.Escrow as Escrow
+import qualified Language.PlutusTx.Coordination.Contracts.Swap as Swap
+import qualified Ledger.Scripts as Plutus
+import qualified Ledger.Typed.Scripts as Plutus
+import qualified Ledger.Ada as Ada
+import qualified Ledger as Ledger
+import qualified Language.PlutusTx.TH as PlutusTx
+import qualified Language.PlutusTx.Code as PlutusTx
+import Wallet.Emulator.Wallet
+import Language.PlutusCore.Core
+import Language.PlutusCore
+import Language.Plutus.Contract.Trace
+import Ledger.Crypto
+import Ledger.Value
 
 instance NFData RelScore
 instance B.Binary RelScore
@@ -73,6 +98,80 @@ instance CBOR.Serialise IrisClass
 instance F.Flat IrisClass
 instance S.Store IrisClass
 instance R.Persist IrisClass
+
+wallet1, wallet2, wallet3 :: Wallet
+wallet1 = Wallet 1
+wallet2 = Wallet 2
+wallet3 = Wallet 3
+
+escrowParams :: Escrow.EscrowParams d
+escrowParams =
+  Escrow.EscrowParams
+    { Escrow.escrowDeadline = 200
+    , Escrow.escrowTargets  =
+        [ Escrow.payToPubKeyTarget (pubKeyHash $ walletPubKey wallet1)
+                                   (Ada.lovelaceValueOf 10)
+        , Escrow.payToPubKeyTarget (pubKeyHash $ walletPubKey wallet2)
+                                   (Ada.lovelaceValueOf 20)
+        ]
+    }
+
+vesting :: Vesting.VestingParams
+vesting =
+    Vesting.VestingParams
+        { Vesting.vestingTranche1 =
+            Vesting.VestingTranche (Ledger.Slot 10) (Ada.lovelaceValueOf 20)
+        , Vesting.vestingTranche2 =
+            Vesting.VestingTranche (Ledger.Slot 20) (Ada.lovelaceValueOf 40)
+        , Vesting.vestingOwner    = Ledger.pubKeyHash $ walletPubKey wallet1 }
+
+-- Future data
+forwardPrice :: Value
+forwardPrice = Ada.lovelaceValueOf 1123
+
+penalty :: Value
+penalty = Ada.lovelaceValueOf 1000
+
+units :: Integer
+units = 187
+
+oracleKeys :: (PrivateKey, PubKey)
+oracleKeys =
+    let wllt = Wallet 10 in
+        (walletPrivKey wllt, walletPubKey wllt)
+
+accounts :: Future.FutureAccounts
+accounts =
+    either error id
+        $ evalTrace @Future.FutureSchema @Future.FutureError
+            Future.setupTokens
+            ( handleBlockchainEvents wallet1 >> 
+              addBlocks 1 >>
+              handleBlockchainEvents wallet1 >>
+              addBlocks 1 >>
+              handleBlockchainEvents wallet1 ) wallet1
+
+theFuture :: Future.Future
+theFuture = Future.Future {
+    Future.ftDeliveryDate  = Ledger.Slot 100,
+    Future.ftUnits         = units,
+    Future.ftUnitPrice     = forwardPrice,
+    Future.ftInitialMargin = Ada.lovelaceValueOf 800,
+    Future.ftPriceOracle   = snd oracleKeys,
+    Future.ftMarginPenalty = penalty
+    }
+
+-- Plutus contracts
+plutusContracts :: [ (String, Program TyName Name DefaultUni ()) ]
+plutusContracts = map (second (Plutus.unScript . Plutus.unValidatorScript))
+  [ ("game", Game.gameValidator)
+  , ("crowdfunding", Crowdfunding.contributionScript Crowdfunding.theCampaign)
+  , ("vesting", Vesting.vestingScript vesting)
+  , ("escrow", Plutus.validatorScript $ Escrow.scriptInstance escrowParams)
+  , ("future", Future.validator theFuture accounts) ] ++
+
+  [ ("future-partial", 
+      PlutusTx.getPlc $$(PlutusTx.compile [|| Future.futureStateMachine ||])) ]
 
 -- irisData = iris
 irisData :: [Iris]
