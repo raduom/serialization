@@ -49,7 +49,7 @@ benchmark all
   default-language: Haskell2010
   type: exitcode-stdio-1.0
   main-is:             Main.hs
-  other-modules: Dataset,Report
+  other-modules: Dataset,Report,Plutus.Flat
   build-depends:
                 QuickCheck,
                 base,

@@ -33,6 +33,9 @@ import qualified Flat                          as F
 import           GHC.Generics
 import           Report
 import           System.Mem                    (performMajorGC)
+import Plutus.Flat ()
+import Language.PlutusCore.Core
+import Language.PlutusCore
 
 -- Testing and random data generation
 import           Test.QuickCheck
@@ -329,6 +332,7 @@ runBench
   !carsDataset <- force . ("Cars", ) <$> carsData
     -- !abaloneDataset <- force . ("Abalone dataset",) <$> abaloneData
   let !irisDataset = force ("Iris", irisData)
+  let !plutusDataset = force plutusContracts
 
   performMajorGC
 
@@ -338,7 +342,8 @@ runBench
   let tests =
         benchs directionList ++
         benchs intTree ++
-        benchs directionTree ++ benchs carsDataset ++ benchs irisDataset
+        benchs directionTree ++ benchs carsDataset ++ benchs irisDataset ++
+        concatMap benchPlutus plutusDataset
   -- let tests = []
 
   defaultMainWith
@@ -354,6 +359,8 @@ runBench
   sizes intTree
   sizes carsDataset
   sizes irisDataset
+
+  mapM_ sizesPlutus plutusContracts
 
   addTransfers workDir
 
@@ -426,27 +433,47 @@ fromRight :: Either a b -> b
 fromRight (Right v) = v
 fromRight (Left _)  = error "Unexpected Left"
 
-pkgs =
+plutusCodecs ::
+     ( NFData a
+     , Serialise a
+     , F.Flat a
+     )
+  => [(String, a -> IO BS.ByteString, BS.ByteString -> IO a)]
+plutusCodecs =
   [ ("flat", serialize PkgFlat, deserialize PkgFlat)
   , ("flat-zlib", serialize PkgFlatZ, deserialize PkgFlatZ)
   , ("flat-pure-zlib", serialize PkgFlatZP, deserialize PkgFlatZP)
-  , ("store", serialize PkgStore, deserialize PkgStore)
-  , ("binary", serialize PkgBinary, deserialize PkgBinary)
-  , ("cereal", serialize PkgCereal, deserialize PkgCereal)
-  , ("persist", serialize PkgPersist, deserialize PkgPersist)
+  --, ("persist", serialize PkgPersist, deserialize PkgPersist)
   , ("serialise", serialize PkgCBOR, deserialize PkgCBOR)
   , ("serialise-zlib", serialize PkgCBORZ, deserialize PkgCBORZ)
   , ("serialise-pure-zlib", serialize PkgCBORZP, deserialize PkgCBORZP)
   ]
 
 benchPlutus ::
-    ( Eq a
-    , NFData a
-    , F.Flat a
-    , Serialise a 
-    )
-  => (String, a)
+     (String, Program TyName Name DefaultUni ())
   -> [Benchmark]
-benchPlutus (name , contract) =
-  undefined
+benchPlutus (name , obj) =
+   let nm pkg = concat [ name , " - " , pkg ]
+   in [ bgroup "serialization (time)" $
+        map (\(pkg, s, _) -> bench (nm pkg) (nfIO (BS.length <$> s obj))) plutusCodecs
+                                                                          -- NOTE: the benchmark time includes the comparison of the deserialised obj with the original
+      , bgroup "deserialization (time)" $
+        map
+          (\(pkg, s, d) ->
+             env (s obj) $ (\bs -> bench (nm pkg) $ whnfIO ((obj ==) <$> d bs)))
+          plutusCodecs
+      ]
 
+sizesPlutus ::
+     ( NFData t
+     , F.Flat t
+     , Serialise t
+     )
+  => (String, t)
+  -> IO ()
+sizesPlutus (name, obj) = do
+  ss <-
+    mapM
+      (\(n, s, _) -> (\ss -> (n, fromIntegral . BS.length $ ss)) <$> s obj)
+      plutusCodecs
+  addMeasures workDir ("size (bytes)/" ++ name) ss

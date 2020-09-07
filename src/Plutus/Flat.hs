@@ -9,8 +9,6 @@ module Plutus.Flat where
 
 -- As: plutus-core/src/Language/PlutusCore/CBOR.hs
 
-import qualified Language.PlutusTx.Coordination.Contracts.Game as Plutus
-import qualified Ledger.Scripts as Plutus
 import Language.PlutusCore.Core
 import Language.PlutusCore
 import Flat

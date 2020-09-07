@@ -6,7 +6,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Dataset(carsData,irisData) where
+module Dataset ( carsData
+               , irisData 
+               , plutusContracts
+               ) where
 import           Codec.Serialise       as CBOR
 import           Control.DeepSeq
 import Data.Bifunctor (second)
@@ -19,15 +22,12 @@ import           Numeric.Datasets      (getDataset)
 -- import           Numeric.Datasets.Abalone   (abalone)
 import           Numeric.Datasets.Car
 import           Numeric.Datasets.Iris
-import GHC.Generics
 
 import qualified Language.PlutusTx.Coordination.Contracts.Game as Game
 import qualified Language.PlutusTx.Coordination.Contracts.Crowdfunding as Crowdfunding
-import qualified Language.PlutusTx.Coordination.Contracts.PingPong as PingPong
 import qualified Language.PlutusTx.Coordination.Contracts.Vesting as Vesting
 import qualified Language.PlutusTx.Coordination.Contracts.Future as Future
 import qualified Language.PlutusTx.Coordination.Contracts.Escrow as Escrow
-import qualified Language.PlutusTx.Coordination.Contracts.Swap as Swap
 import qualified Ledger.Scripts as Plutus
 import qualified Ledger.Typed.Scripts as Plutus
 import qualified Ledger.Ada as Ada
