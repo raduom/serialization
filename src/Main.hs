@@ -13,29 +13,31 @@
 
 module Main where
 
-import qualified "zlib" Codec.Compression.Zlib as Zlib
 import qualified "pure-zlib" Codec.Compression.Zlib as PureZlib
-import           Codec.Serialise               as CBOR
+import qualified "zlib" Codec.Compression.Zlib      as Zlib
+import           Codec.Serialise                    as CBOR
 import           Control.DeepSeq
 import           Criterion.Types
-import qualified Data.Binary                   as B
-import qualified Data.ByteString               as BS
-import qualified Data.ByteString.Lazy          as LBS
+import qualified Data.Binary                        as B
+import qualified Data.ByteString                    as BS
+import qualified Data.ByteString.Lazy               as LBS
 import           Data.List
-import qualified Data.Persist                  as R
-import qualified Data.Serialize                as C
-import qualified Data.Store                    as S
-import qualified Data.Text                     as T
-import qualified Data.Text.Encoding            as T
+import qualified Data.Persist                       as R
+import qualified Data.Serialize                     as C
+import qualified Data.Store                         as S
+import qualified Data.Text                          as T
+import qualified Data.Text.Encoding                 as T
 import           Data.Typeable
 import           Dataset
-import qualified Flat                          as F
+import qualified Flat                               as F
 import           GHC.Generics
+import           Language.PlutusCore                (Name)
+import           Language.PlutusCore.Universe
+import           Language.UntypedPlutusCore
+import           Plutus.CBOR                        ()
+import           Plutus.Flat                        ()
 import           Report
-import           System.Mem                    (performMajorGC)
-import Plutus.Flat ()
-import Language.PlutusCore.Core
-import Language.PlutusCore
+import           System.Mem                         (performMajorGC)
 
 -- Testing and random data generation
 import           Test.QuickCheck
@@ -43,11 +45,9 @@ import           Test.QuickCheck
 -- Benchmarks
 import           Criterion.Main
 
-data BinTree a
-  = Tree (BinTree a)
-         (BinTree a)
-  | Leaf a
-  deriving (Show, Read, Eq, Typeable, Generic)
+data BinTree a = Tree (BinTree a) (BinTree a)
+    | Leaf a
+    deriving (Show, Read, Eq, Typeable, Generic)
 
 -- General instances
 instance {-# OVERLAPPABLE #-} F.Flat a => F.Flat (BinTree a)
@@ -93,26 +93,13 @@ instance Arbitrary a => Arbitrary (BinTree a) where
   shrink (Tree left right) = [left, right] ++ shrink left ++ shrink right
 
 -- A simple enumeration
-data Direction
-  = North
-  | South
-  | Center
-  | East
-  | West
-  deriving ( Eq
-           , Ord
-           , Read
-           , Show
-           , Typeable
-           , Generic
-           , NFData
-           , B.Binary
-           , C.Serialize
-           , CBOR.Serialise
-           , S.Store
-           , R.Persist
-           , F.Flat
-           )
+data Direction = North
+    | South
+    | Center
+    | East
+    | West
+    deriving (Eq, Ord, Read, Show, Typeable, Generic, NFData, B.Binary,
+          C.Serialize, CBOR.Serialise, S.Store, R.Persist, F.Flat)
 
 instance Arbitrary Direction where
   arbitrary = elements [North, South, Center, East, West]
@@ -156,41 +143,29 @@ instance Arbitrary Direction where
 --       0 -> Leaf <$> decode
 --       1 -> Tree <$> decode <*> decode
 --       _ -> fail "CBOR.Serialise.decode for BinTree"
-data PkgBinary =
-  PkgBinary
+data PkgBinary = PkgBinary
 
-data PkgPersist =
-  PkgPersist
+data PkgPersist = PkgPersist
 
-data PkgCereal =
-  PkgCereal
+data PkgCereal = PkgCereal
 
-data PkgPackman =
-  PkgPackman
+data PkgPackman = PkgPackman
 
-data PkgCBOR =
-  PkgCBOR
+data PkgCBOR = PkgCBOR
 
-data PkgFlat =
-  PkgFlat
+data PkgFlat = PkgFlat
 
-data PkgStore =
-  PkgStore
+data PkgStore = PkgStore
 
-data PkgShow =
-    PkgShow
+data PkgShow = PkgShow
 
-data PkgFlatZ =
-    PkgFlatZ
+data PkgFlatZ = PkgFlatZ
 
-data PkgFlatZP =
-    PkgFlatZP
+data PkgFlatZP = PkgFlatZP
 
-data PkgCBORZ =
-    PkgCBORZ
+data PkgCBORZ = PkgCBORZ
 
-data PkgCBORZP =
-    PkgCBORZP
+data PkgCBORZP = PkgCBORZP
 
 class Serialize lib a where
   serialize :: lib -> a -> IO BS.ByteString
@@ -450,7 +425,7 @@ plutusCodecs =
   ]
 
 benchPlutus ::
-     (String, Program TyName Name DefaultUni ())
+     (String, Term Name DefaultUni ())
   -> [Benchmark]
 benchPlutus (name , obj) =
    let nm pkg = concat [ name , " - " , pkg ]

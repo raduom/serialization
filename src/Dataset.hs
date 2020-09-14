@@ -1,45 +1,45 @@
+{-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DeriveAnyClass     #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE TypeApplications   #-}
 
 module Dataset ( carsData
-               , irisData 
+               , irisData
                , plutusContracts
                ) where
-import           Codec.Serialise       as CBOR
+import           Codec.Serialise                                       as CBOR
 import           Control.DeepSeq
-import Data.Bifunctor (second)
-import qualified Data.Binary           as B
-import qualified Data.Persist          as R
-import qualified Data.Serialize        as C
-import qualified Data.Store            as S
-import qualified Flat                  as F
-import           Numeric.Datasets      (getDataset)
+import           Data.Bifunctor                                        (second)
+import qualified Data.Binary                                           as B
+import qualified Data.Persist                                          as R
+import qualified Data.Serialize                                        as C
+import qualified Data.Store                                            as S
+import qualified Flat                                                  as F
+import           Numeric.Datasets                                      (getDataset)
 -- import           Numeric.Datasets.Abalone   (abalone)
 import           Numeric.Datasets.Car
 import           Numeric.Datasets.Iris
 
-import qualified Language.PlutusTx.Coordination.Contracts.Game as Game
+import           Language.Plutus.Contract.Trace
+import qualified Language.PlutusCore                                   as TPLC
+import           Language.PlutusCore.Universe
+import qualified Language.PlutusTx.Code                                as PlutusTx
 import qualified Language.PlutusTx.Coordination.Contracts.Crowdfunding as Crowdfunding
-import qualified Language.PlutusTx.Coordination.Contracts.Vesting as Vesting
-import qualified Language.PlutusTx.Coordination.Contracts.Future as Future
-import qualified Language.PlutusTx.Coordination.Contracts.Escrow as Escrow
-import qualified Ledger.Scripts as Plutus
-import qualified Ledger.Typed.Scripts as Plutus
-import qualified Ledger.Ada as Ada
-import qualified Ledger as Ledger
-import qualified Language.PlutusTx.TH as PlutusTx
-import qualified Language.PlutusTx.Code as PlutusTx
-import Wallet.Emulator.Wallet
-import Language.PlutusCore.Core
-import Language.PlutusCore
-import Language.Plutus.Contract.Trace
-import Ledger.Crypto
-import Ledger.Value
+import qualified Language.PlutusTx.Coordination.Contracts.Escrow       as Escrow
+import qualified Language.PlutusTx.Coordination.Contracts.Future       as Future
+import qualified Language.PlutusTx.Coordination.Contracts.Game         as Game
+import qualified Language.PlutusTx.Coordination.Contracts.Vesting      as Vesting
+import qualified Language.PlutusTx.TH                                  as PlutusTx
+import           Language.UntypedPlutusCore
+import qualified Ledger                                                as Ledger
+import qualified Ledger.Ada                                            as Ada
+import           Ledger.Crypto
+import qualified Ledger.Scripts                                        as Plutus
+import qualified Ledger.Typed.Scripts                                  as Plutus
+import           Ledger.Value
 
 instance NFData RelScore
 instance B.Binary RelScore
@@ -99,6 +99,8 @@ instance F.Flat IrisClass
 instance S.Store IrisClass
 instance R.Persist IrisClass
 
+instance NFData (Term TPLC.Name DefaultUni ())
+
 wallet1, wallet2, wallet3 :: Wallet
 wallet1 = Wallet 1
 wallet2 = Wallet 2
@@ -145,7 +147,7 @@ accounts =
     either error id
         $ evalTrace @Future.FutureSchema @Future.FutureError
             Future.setupTokens
-            ( handleBlockchainEvents wallet1 >> 
+            ( handleBlockchainEvents wallet1 >>
               addBlocks 1 >>
               handleBlockchainEvents wallet1 >>
               addBlocks 1 >>
@@ -162,16 +164,22 @@ theFuture = Future.Future {
     }
 
 -- Plutus contracts
-plutusContracts :: [ (String, Program TyName Name DefaultUni ()) ]
-plutusContracts = map (second (Plutus.unScript . Plutus.unValidatorScript))
+eraseTypes
+  :: TPLC.Program TPLC.TyName TPLC.Name DefaultUni ()
+  -> Term TPLC.Name DefaultUni ()
+eraseTypes (TPLC.Program () _ t) = erase t
+
+plutusContracts :: [ (String, Term TPLC.Name DefaultUni ()) ]
+plutusContracts = map (second (eraseTypes . Plutus.unScript . Plutus.unValidatorScript))
   [ ("game", Game.gameValidator)
   , ("crowdfunding", Crowdfunding.contributionScript Crowdfunding.theCampaign)
   , ("vesting", Vesting.vestingScript vesting)
   , ("escrow", Plutus.validatorScript $ Escrow.scriptInstance escrowParams)
   , ("future", Future.validator theFuture accounts) ] ++
 
-  [ ("future-partial", 
-      PlutusTx.getPlc $$(PlutusTx.compile [|| Future.futureStateMachine ||])) ]
+  [ ("future-partial",
+      eraseTypes $
+        PlutusTx.getPlc $$(PlutusTx.compile [|| Future.futureStateMachine ||])) ]
 
 -- irisData = iris
 irisData :: [Iris]

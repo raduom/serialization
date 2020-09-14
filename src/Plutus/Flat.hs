@@ -1,20 +1,25 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DerivingVia        #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE TypeApplications   #-}
 
 module Plutus.Flat where
 
 -- As: plutus-core/src/Language/PlutusCore/CBOR.hs
 
-import Language.PlutusCore.Core
-import Language.PlutusCore
-import Flat
-import Flat.Encoder
-import Flat.Decoder
-import Data.Proxy
+import           Data.Proxy
+import           Flat
+import           Flat.Decoder
+import           Flat.Encoder
+import           Language.PlutusCore          (BuiltinName (..),
+                                               DynamicBuiltinName (..),
+                                               Name (..),
+                                               StaticBuiltinName (..),
+                                               Unique (..))
+import           Language.PlutusCore.Universe
+import           Language.UntypedPlutusCore
 
 encodeConstructorTag :: Word -> Encoding
 encodeConstructorTag = eWord
@@ -26,7 +31,7 @@ instance Flat (Some (TypeIn DefaultUni)) where
   encode (Some (TypeIn uni)) = encodeConstructorTag . fromIntegral $ tagOf uni
 
   decode = go . uniAt . fromIntegral =<< decodeConstructorTag where
-    go Nothing = fail "Failed to decode a universe"
+    go Nothing    = fail "Failed to decode a universe"
     go (Just uni) = pure uni
 
   size (Some (TypeIn _)) acc = 6 + acc
@@ -97,47 +102,8 @@ instance Flat Unique where
     size (Unique i) = sInt i
 
 instance Flat Name where
-    -- TODO: should we encode the name or not?
     encode (Name txt u) = encode txt <> encode u
     decode = Name <$> decode <*> decode
-
-instance Flat TyName where
-    encode (TyName n) = encode n
-    decode = TyName <$> decode
-
-instance Flat ann => Flat (Version ann) where
-    encode (Version ann n n' n'') = encode ann <> encode n <> encode n' <> encode n''
-    decode = Version <$> decode <*> decode <*> decode <*> decode
-
-instance Flat ann => Flat (Kind ann) where
-    encode = \case
-        Type ann           -> encodeConstructorTag 0 <> encode ann
-        KindArrow ann k k' -> encodeConstructorTag 1 <> encode ann <> encode k  <> encode k'
-
-    decode = go =<< decodeConstructorTag
-        where go 0 = Type      <$> decode
-              go 1 = KindArrow <$> decode <*> decode <*> decode
-              go _ = fail "Failed to decode Kind ()"
-
-instance (Flat ann, Flat tyname) => Flat (Type tyname DefaultUni ann) where
-    encode = \case
-        TyVar     ann tn      -> encodeConstructorTag 0 <> encode ann <> encode tn
-        TyFun     ann t t'    -> encodeConstructorTag 1 <> encode ann <> encode t   <> encode t'
-        TyIFix    ann pat arg -> encodeConstructorTag 2 <> encode ann <> encode pat <> encode arg
-        TyForall  ann tn k t  -> encodeConstructorTag 3 <> encode ann <> encode tn  <> encode k <> encode t
-        TyBuiltin ann con     -> encodeConstructorTag 4 <> encode ann <> encode con
-        TyLam     ann n k t   -> encodeConstructorTag 5 <> encode ann <> encode n   <> encode k <> encode t
-        TyApp     ann t t'    -> encodeConstructorTag 6 <> encode ann <> encode t   <> encode t'
-
-    decode = go =<< decodeConstructorTag
-        where go 0 = TyVar     <$> decode <*> decode
-              go 1 = TyFun     <$> decode <*> decode <*> decode
-              go 2 = TyIFix    <$> decode <*> decode <*> decode
-              go 3 = TyForall  <$> decode <*> decode <*> decode <*> decode
-              go 4 = TyBuiltin <$> decode <*> decode
-              go 5 = TyLam     <$> decode <*> decode <*> decode <*> decode
-              go 6 = TyApp     <$> decode <*> decode <*> decode
-              go _ = fail "Failed to decode Type TyName ()"
 
 instance Flat DynamicBuiltinName where
     encode (DynamicBuiltinName name) = encode name
@@ -153,37 +119,25 @@ instance Flat BuiltinName where
               go _ = fail "Failed to decode Builtin ()"
 
 instance ( Flat ann
-         , Flat tyname
          , Flat name
-         ) => Flat (Term tyname name DefaultUni ann) where
+         ) => Flat (Term name DefaultUni ann) where
     encode = \case
-        Var      ann n         -> encodeConstructorTag 0 <> encode ann <> encode n
-        TyAbs    ann tn k t    -> encodeConstructorTag 1 <> encode ann <> encode tn  <> encode k   <> encode t
-        LamAbs   ann n ty t    -> encodeConstructorTag 2 <> encode ann <> encode n   <> encode ty  <> encode t
-        Apply    ann t t'      -> encodeConstructorTag 3 <> encode ann <> encode t   <> encode t'
-        Constant ann c         -> encodeConstructorTag 4 <> encode ann <> encode c
-        TyInst   ann t ty      -> encodeConstructorTag 5 <> encode ann <> encode t   <> encode ty
-        Unwrap   ann t         -> encodeConstructorTag 6 <> encode ann <> encode t
-        IWrap    ann pat arg t -> encodeConstructorTag 7 <> encode ann <> encode pat <> encode arg <> encode t
-        Error    ann ty        -> encodeConstructorTag 8 <> encode ann <> encode ty
-        Builtin  ann bn        -> encodeConstructorTag 9 <> encode ann <> encode bn
+        Var      ann n    -> encodeConstructorTag 0 <> encode ann <> encode n
+        LamAbs   ann n t  -> encodeConstructorTag 2 <> encode ann <> encode n <> encode t
+        Apply    ann t t' -> encodeConstructorTag 3 <> encode ann <> encode t <> encode t'
+        Constant ann c    -> encodeConstructorTag 4 <> encode ann <> encode c
+        Delay    ann t    -> encodeConstructorTag 1 <> encode ann <> encode t
+        Force    ann t    -> encodeConstructorTag 5 <> encode ann <> encode t
+        Error    ann      -> encodeConstructorTag 8 <> encode ann
+        Builtin  ann bn   -> encodeConstructorTag 9 <> encode ann <> encode bn
 
     decode = go =<< decodeConstructorTag
         where go 0 = Var      <$> decode <*> decode
-              go 1 = TyAbs    <$> decode <*> decode <*> decode <*> decode
-              go 2 = LamAbs   <$> decode <*> decode <*> decode <*> decode
+              go 1 = Delay    <$> decode <*> decode
+              go 2 = LamAbs   <$> decode <*> decode <*> decode
               go 3 = Apply    <$> decode <*> decode <*> decode
               go 4 = Constant <$> decode <*> decode
-              go 5 = TyInst   <$> decode <*> decode <*> decode
-              go 6 = Unwrap   <$> decode <*> decode
-              go 7 = IWrap    <$> decode <*> decode <*> decode <*> decode
-              go 8 = Error    <$> decode <*> decode
+              go 5 = Force    <$> decode <*> decode
+              go 8 = Error    <$> decode
               go 9 = Builtin  <$> decode <*> decode
               go _ = fail "Failed to decode Term TyName Name ()"
-
-instance ( Flat ann
-         , Flat tyname
-         , Flat name
-         ) => Flat (Program tyname name DefaultUni ann) where
-    encode (Program ann v t) = encode ann <> encode v <> encode t
-    decode = Program <$> decode <*> decode <*> decode
