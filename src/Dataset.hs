@@ -10,6 +10,7 @@ module Dataset ( carsData
                , irisData
                , plutusContracts
                ) where
+
 import           Codec.Serialise                                       as CBOR
 import           Control.DeepSeq
 import           Data.Bifunctor                                        (second)
@@ -19,11 +20,11 @@ import qualified Data.Serialize                                        as C
 import qualified Data.Store                                            as S
 import qualified Flat                                                  as F
 import           Numeric.Datasets                                      (getDataset)
--- import           Numeric.Datasets.Abalone   (abalone)
 import           Numeric.Datasets.Car
 import           Numeric.Datasets.Iris
 
 import           Language.Plutus.Contract.Trace
+import Language.UntypedPlutusCore.DeBruijn
 import qualified Language.PlutusCore                                   as TPLC
 import           Language.PlutusCore.Universe
 import qualified Language.PlutusTx.Code                                as PlutusTx
@@ -99,7 +100,7 @@ instance F.Flat IrisClass
 instance S.Store IrisClass
 instance R.Persist IrisClass
 
-instance NFData (Term TPLC.Name DefaultUni ())
+--instance NFData (Term TPLC.Name DefaultUni ())
 
 wallet1, wallet2, wallet3 :: Wallet
 wallet1 = Wallet 1
@@ -164,13 +165,18 @@ theFuture = Future.Future {
     }
 
 -- Plutus contracts
-eraseTypes
-  :: TPLC.Program TPLC.TyName TPLC.Name DefaultUni ()
-  -> Term TPLC.Name DefaultUni ()
-eraseTypes (TPLC.Program () _ t) = erase t
+getTerm
+  :: Program name uni att
+  -> Term name uni att
+getTerm (Program _ _ t) = t
+
+runQuotedProgram
+  :: Program DeBruijn DefaultUni ()
+  -> Program TPLC.Name DefaultUni ()
+runQuotedProgram = undefined
 
 plutusContracts :: [ (String, Term TPLC.Name DefaultUni ()) ]
-plutusContracts = map (second (eraseTypes . Plutus.unScript . Plutus.unValidatorScript))
+plutusContracts = map (second (getTerm . runQuotedProgram . Plutus.unScript . Plutus.unValidatorScript))
   [ ("game", Game.gameValidator)
   , ("crowdfunding", Crowdfunding.contributionScript Crowdfunding.theCampaign)
   , ("vesting", Vesting.vestingScript vesting)
@@ -178,7 +184,7 @@ plutusContracts = map (second (eraseTypes . Plutus.unScript . Plutus.unValidator
   , ("future", Future.validator theFuture accounts) ] ++
 
   [ ("future-partial",
-      eraseTypes $
+      getTerm $
         PlutusTx.getPlc $$(PlutusTx.compile [|| Future.futureStateMachine ||])) ]
 
 -- irisData = iris

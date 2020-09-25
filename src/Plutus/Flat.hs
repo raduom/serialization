@@ -4,6 +4,8 @@
 {-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications   #-}
+{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 module Plutus.Flat where
 
@@ -13,10 +15,7 @@ import           Data.Proxy
 import           Flat
 import           Flat.Decoder
 import           Flat.Encoder
-import           Language.PlutusCore          (BuiltinName (..),
-                                               DynamicBuiltinName (..),
-                                               Name (..),
-                                               StaticBuiltinName (..),
+import           Language.PlutusCore          (Name (..),
                                                Unique (..))
 import           Language.PlutusCore.Universe
 import           Language.UntypedPlutusCore
@@ -27,10 +26,32 @@ encodeConstructorTag = eWord
 decodeConstructorTag :: Get Word
 decodeConstructorTag = dWord
 
-instance Flat (Some (TypeIn DefaultUni)) where
-  encode (Some (TypeIn uni)) = encodeConstructorTag . fromIntegral $ tagOf uni
+instance Flat (Term Name DefaultUni ()) where
+    encode = \case
+        Var      ann n         -> encodeConstructorTag 0 <> encode ann <> encode n
+        Delay    ann t         -> encodeConstructorTag 1 <> encode ann <> encode t
+        LamAbs   ann n t       -> encodeConstructorTag 2 <> encode ann <> encode n <> encode t
+        Apply    ann t t'      -> encodeConstructorTag 3 <> encode ann <> encode t <> encode t'
+        Constant ann c         -> encodeConstructorTag 4 <> encode ann <> encode c
+        Force    ann t         -> encodeConstructorTag 5 <> encode ann <> encode t
+        Error    ann           -> encodeConstructorTag 6 <> encode ann
+        Builtin  ann bn        -> encodeConstructorTag 7 <> encode ann <> encode bn
 
-  decode = go . uniAt . fromIntegral =<< decodeConstructorTag where
+    decode = go =<< decodeConstructorTag
+        where go 0 = Var      <$> decode <*> decode
+              go 1 = Delay    <$> decode <*> decode
+              go 2 = LamAbs   <$> decode <*> decode <*> decode
+              go 3 = Apply    <$> decode <*> decode <*> decode
+              go 4 = Constant <$> decode <*> decode
+              go 5 = Force    <$> decode <*> decode
+              go 6 = Error    <$> decode
+              go 7 = Builtin  <$> decode <*> decode
+              go _ = fail "Failed to decode Term TyName Name ()"
+
+instance Flat (Some (TypeIn DefaultUni)) where
+  encode (Some (TypeIn uni)) = encode . map (fromIntegral  :: Int -> Word) $ encodeUni uni
+
+  decode = go . decodeUni . map (fromIntegral :: Word -> Int) =<< decode where
     go Nothing    = fail "Failed to decode a universe"
     go (Just uni) = pure uni
 
@@ -118,26 +139,26 @@ instance Flat BuiltinName where
               go 1 = DynBuiltinName    <$> decode
               go _ = fail "Failed to decode Builtin ()"
 
-instance ( Flat ann
-         , Flat name
-         ) => Flat (Term name DefaultUni ann) where
-    encode = \case
-        Var      ann n    -> encodeConstructorTag 0 <> encode ann <> encode n
-        LamAbs   ann n t  -> encodeConstructorTag 2 <> encode ann <> encode n <> encode t
-        Apply    ann t t' -> encodeConstructorTag 3 <> encode ann <> encode t <> encode t'
-        Constant ann c    -> encodeConstructorTag 4 <> encode ann <> encode c
-        Delay    ann t    -> encodeConstructorTag 1 <> encode ann <> encode t
-        Force    ann t    -> encodeConstructorTag 5 <> encode ann <> encode t
-        Error    ann      -> encodeConstructorTag 8 <> encode ann
-        Builtin  ann bn   -> encodeConstructorTag 9 <> encode ann <> encode bn
+-- instance ( Flat ann
+--          , Flat name
+--          ) => Flat (Term name DefaultUni ann) where
+--     encode = \case
+--         Var      ann n    -> encodeConstructorTag 0 <> encode ann <> encode n
+--         LamAbs   ann n t  -> encodeConstructorTag 2 <> encode ann <> encode n <> encode t
+--         Apply    ann t t' -> encodeConstructorTag 3 <> encode ann <> encode t <> encode t'
+--         Constant ann c    -> encodeConstructorTag 4 <> encode ann <> encode c
+--         Delay    ann t    -> encodeConstructorTag 1 <> encode ann <> encode t
+--         Force    ann t    -> encodeConstructorTag 5 <> encode ann <> encode t
+--         Error    ann      -> encodeConstructorTag 8 <> encode ann
+--         Builtin  ann bn   -> encodeConstructorTag 9 <> encode ann <> encode bn
 
-    decode = go =<< decodeConstructorTag
-        where go 0 = Var      <$> decode <*> decode
-              go 1 = Delay    <$> decode <*> decode
-              go 2 = LamAbs   <$> decode <*> decode <*> decode
-              go 3 = Apply    <$> decode <*> decode <*> decode
-              go 4 = Constant <$> decode <*> decode
-              go 5 = Force    <$> decode <*> decode
-              go 8 = Error    <$> decode
-              go 9 = Builtin  <$> decode <*> decode
-              go _ = fail "Failed to decode Term TyName Name ()"
+--     decode = go =<< decodeConstructorTag
+--         where go 0 = Var      <$> decode <*> decode
+--               go 1 = Delay    <$> decode <*> decode
+--               go 2 = LamAbs   <$> decode <*> decode <*> decode
+--               go 3 = Apply    <$> decode <*> decode <*> decode
+--               go 4 = Constant <$> decode <*> decode
+--               go 5 = Force    <$> decode <*> decode
+--               go 8 = Error    <$> decode
+--               go 9 = Builtin  <$> decode <*> decode
+--               go _ = fail "Failed to decode Term TyName Name ()"

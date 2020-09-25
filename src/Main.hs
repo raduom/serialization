@@ -34,7 +34,7 @@ import           GHC.Generics
 import           Language.PlutusCore                (Name)
 import           Language.PlutusCore.Universe
 import           Language.UntypedPlutusCore
-import           Plutus.CBOR                        ()
+--import           Plutus.CBOR                        ()
 import           Plutus.Flat                        ()
 import           Report
 import           System.Mem                         (performMajorGC)

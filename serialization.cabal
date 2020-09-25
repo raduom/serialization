@@ -9,7 +9,11 @@ cabal-version:       >=1.10
 
 library
   default-language: Haskell2010
-  exposed-modules: Dataset,Report,Plutus.Flat,Plutus.CBOR
+  exposed-modules: 
+    Dataset
+    Report
+    Plutus.Flat
+--    Plutus.CBOR
   HS-Source-Dirs:     src
   build-depends: base,
                  datasets,
@@ -50,7 +54,11 @@ benchmark all
   default-language: Haskell2010
   type: exitcode-stdio-1.0
   main-is:             Main.hs
-  other-modules: Dataset,Report,Plutus.Flat, Plutus.CBOR
+  other-modules:
+    Dataset
+    Report
+    Plutus.Flat
+--    Plutus.CBOR
   build-depends:
                 QuickCheck,
                 base,
