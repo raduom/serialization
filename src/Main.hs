@@ -315,9 +315,9 @@ runBench
   let htmlReport = "report.html"
 
   let tests =
-        benchs directionList ++
-        benchs intTree ++
-        benchs directionTree ++ benchs carsDataset ++ benchs irisDataset ++
+        -- benchs directionList ++
+        -- benchs intTree ++
+        -- benchs directionTree ++ benchs carsDataset ++ benchs irisDataset ++
         concatMap benchPlutus plutusDataset
   -- let tests = []
 
@@ -329,11 +329,11 @@ runBench
 
   updateMeasures workDir
 
-  sizes directionList
-  sizes directionTree
-  sizes intTree
-  sizes carsDataset
-  sizes irisDataset
+  -- sizes directionList
+  -- sizes directionTree
+  -- sizes intTree
+  -- sizes carsDataset
+  -- sizes irisDataset
 
   mapM_ sizesPlutus plutusContracts
 

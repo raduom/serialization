@@ -37,7 +37,8 @@ library
                  plutus-contract,
                  plutus-tx,
                  plutus-tx-plugin,
-                 cborg
+                 cborg,
+                 transformers
 test-suite docs
   default-language:   Haskell2010
   type:               exitcode-stdio-1.0
@@ -86,7 +87,8 @@ benchmark all
                 plutus-contract,
                 plutus-tx,
                 plutus-tx-plugin,
-                cborg
+                cborg,
+                transformers
   hs-source-dirs:      src
   ghc-options:         -Wall -fno-warn-orphans -Wno-name-shadowing -Wno-unused-matches -O2
   --ghc-options:         -Wall -O2 -ddump-simpl -dsuppress-idinfo -ddump-to-file

@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE TypeApplications   #-}
 
@@ -13,6 +14,8 @@ module Dataset ( carsData
 
 import           Codec.Serialise                                       as CBOR
 import           Control.DeepSeq
+import Control.Monad.Trans.Except
+import Data.Either (fromRight)
 import           Data.Bifunctor                                        (second)
 import qualified Data.Binary                                           as B
 import qualified Data.Persist                                          as R
@@ -25,15 +28,13 @@ import           Numeric.Datasets.Iris
 
 import           Language.Plutus.Contract.Trace
 import Language.UntypedPlutusCore.DeBruijn
-import qualified Language.PlutusCore                                   as TPLC
 import           Language.PlutusCore.Universe
-import qualified Language.PlutusTx.Code                                as PlutusTx
+import           Language.PlutusCore (Name(..), runQuoteT)
 import qualified Language.PlutusTx.Coordination.Contracts.Crowdfunding as Crowdfunding
 import qualified Language.PlutusTx.Coordination.Contracts.Escrow       as Escrow
 import qualified Language.PlutusTx.Coordination.Contracts.Future       as Future
 import qualified Language.PlutusTx.Coordination.Contracts.Game         as Game
 import qualified Language.PlutusTx.Coordination.Contracts.Vesting      as Vesting
-import qualified Language.PlutusTx.TH                                  as PlutusTx
 import           Language.UntypedPlutusCore
 import qualified Ledger                                                as Ledger
 import qualified Ledger.Ada                                            as Ada
@@ -102,10 +103,9 @@ instance R.Persist IrisClass
 
 --instance NFData (Term TPLC.Name DefaultUni ())
 
-wallet1, wallet2, wallet3 :: Wallet
+wallet1, wallet2 :: Wallet
 wallet1 = Wallet 1
 wallet2 = Wallet 2
-wallet3 = Wallet 3
 
 escrowParams :: Escrow.EscrowParams d
 escrowParams =
@@ -170,22 +170,25 @@ getTerm
   -> Term name uni att
 getTerm (Program _ _ t) = t
 
-runQuotedProgram
-  :: Program DeBruijn DefaultUni ()
-  -> Program TPLC.Name DefaultUni ()
-runQuotedProgram = undefined
+nameDeBruijn 
+  :: Term DeBruijn DefaultUni ()
+  -> Term NamedDeBruijn DefaultUni ()
+nameDeBruijn = termMapNames (\(DeBruijn ix) -> NamedDeBruijn "" ix)
 
-plutusContracts :: [ (String, Term TPLC.Name DefaultUni ()) ]
-plutusContracts = map (second (getTerm . runQuotedProgram . Plutus.unScript . Plutus.unValidatorScript))
+runQuote
+  :: Term NamedDeBruijn DefaultUni ()
+  -> Term Name DefaultUni ()
+runQuote tm = do
+  (fromRight $ error "Failed to assign names to terms") 
+    . runExcept . runQuoteT $ unDeBruijnTerm tm
+
+plutusContracts :: [ (String, Term Name DefaultUni ()) ]
+plutusContracts = map (second (runQuote . nameDeBruijn . getTerm . Plutus.unScript . Plutus.unValidatorScript))
   [ ("game", Game.gameValidator)
   , ("crowdfunding", Crowdfunding.contributionScript Crowdfunding.theCampaign)
   , ("vesting", Vesting.vestingScript vesting)
   , ("escrow", Plutus.validatorScript $ Escrow.scriptInstance escrowParams)
-  , ("future", Future.validator theFuture accounts) ] ++
-
-  [ ("future-partial",
-      getTerm $
-        PlutusTx.getPlc $$(PlutusTx.compile [|| Future.futureStateMachine ||])) ]
+  , ("future", Future.validator theFuture accounts) ]
 
 -- irisData = iris
 irisData :: [Iris]

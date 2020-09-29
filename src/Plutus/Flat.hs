@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications   #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE TypeOperators   #-}
 {-# LANGUAGE UndecidableInstances   #-}
 
@@ -15,10 +16,14 @@ import           Data.Proxy
 import           Flat
 import           Flat.Decoder
 import           Flat.Encoder
+import qualified Codec.CBOR.Decoding as CBOR
+import qualified Codec.CBOR.Encoding as CBOR
+import qualified Codec.Serialise as CBOR
 import           Language.PlutusCore          (Name (..),
                                                Unique (..))
 import           Language.PlutusCore.Universe
 import           Language.UntypedPlutusCore
+import Language.UntypedPlutusCore.DeBruijn
 
 encodeConstructorTag :: Word -> Encoding
 encodeConstructorTag = eWord
@@ -26,7 +31,7 @@ encodeConstructorTag = eWord
 decodeConstructorTag :: Get Word
 decodeConstructorTag = dWord
 
-instance Flat (Term Name DefaultUni ()) where
+instance (Flat name) => Flat (Term name DefaultUni ()) where
     encode = \case
         Var      ann n         -> encodeConstructorTag 0 <> encode ann <> encode n
         Delay    ann t         -> encodeConstructorTag 1 <> encode ann <> encode t
@@ -139,26 +144,14 @@ instance Flat BuiltinName where
               go 1 = DynBuiltinName    <$> decode
               go _ = fail "Failed to decode Builtin ()"
 
--- instance ( Flat ann
---          , Flat name
---          ) => Flat (Term name DefaultUni ann) where
---     encode = \case
---         Var      ann n    -> encodeConstructorTag 0 <> encode ann <> encode n
---         LamAbs   ann n t  -> encodeConstructorTag 2 <> encode ann <> encode n <> encode t
---         Apply    ann t t' -> encodeConstructorTag 3 <> encode ann <> encode t <> encode t'
---         Constant ann c    -> encodeConstructorTag 4 <> encode ann <> encode c
---         Delay    ann t    -> encodeConstructorTag 1 <> encode ann <> encode t
---         Force    ann t    -> encodeConstructorTag 5 <> encode ann <> encode t
---         Error    ann      -> encodeConstructorTag 8 <> encode ann
---         Builtin  ann bn   -> encodeConstructorTag 9 <> encode ann <> encode bn
+instance Flat NamedDeBruijn where
+    encode (NamedDeBruijn _ i) = encode i
+    decode = NamedDeBruijn "" <$> decode
 
---     decode = go =<< decodeConstructorTag
---         where go 0 = Var      <$> decode <*> decode
---               go 1 = Delay    <$> decode <*> decode
---               go 2 = LamAbs   <$> decode <*> decode <*> decode
---               go 3 = Apply    <$> decode <*> decode <*> decode
---               go 4 = Constant <$> decode <*> decode
---               go 5 = Force    <$> decode <*> decode
---               go 8 = Error    <$> decode
---               go 9 = Builtin  <$> decode <*> decode
---               go _ = fail "Failed to decode Term TyName Name ()"
+instance CBOR.Serialise NamedDeBruijn where
+    encode (NamedDeBruijn _ i) = CBOR.encode i
+    decode = NamedDeBruijn "" <$> CBOR.decode
+
+instance Flat Index where
+    encode (Index n) = encode (toInteger n)
+    decode = Index . fromInteger <$> decode
