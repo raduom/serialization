@@ -1,48 +1,39 @@
-{-# LANGUAGE DerivingVia        #-}
-{-# LANGUAGE FlexibleContexts   #-}
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE LambdaCase         #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeApplications   #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE TypeOperators   #-}
-{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE DerivingVia          #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE StandaloneDeriving   #-}
+{-# LANGUAGE TypeApplications     #-}
+{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Plutus.Flat where
 
 -- As: plutus-core/src/Language/PlutusCore/CBOR.hs
 
+import qualified Codec.Serialise                     as CBOR
 import           Data.Proxy
 import           Flat
 import           Flat.Decoder
 import           Flat.Encoder
-import qualified Codec.CBOR.Decoding as CBOR
-import qualified Codec.CBOR.Encoding as CBOR
-import qualified Codec.Serialise as CBOR
-import           Language.PlutusCore          (Name (..),
-                                               Unique (..))
+import           Language.PlutusCore                 (Name (..), Unique (..))
 import           Language.PlutusCore.Universe
 import           Language.UntypedPlutusCore
-import Language.UntypedPlutusCore.DeBruijn
-
-encodeConstructorTag :: Word -> Encoding
-encodeConstructorTag = eWord
-
-decodeConstructorTag :: Get Word
-decodeConstructorTag = dWord
+import           Language.UntypedPlutusCore.DeBruijn
 
 instance (Flat name) => Flat (Term name DefaultUni ()) where
     encode = \case
-        Var      ann n         -> encodeConstructorTag 0 <> encode ann <> encode n
-        Delay    ann t         -> encodeConstructorTag 1 <> encode ann <> encode t
-        LamAbs   ann n t       -> encodeConstructorTag 2 <> encode ann <> encode n <> encode t
-        Apply    ann t t'      -> encodeConstructorTag 3 <> encode ann <> encode t <> encode t'
-        Constant ann c         -> encodeConstructorTag 4 <> encode ann <> encode c
-        Force    ann t         -> encodeConstructorTag 5 <> encode ann <> encode t
-        Error    ann           -> encodeConstructorTag 6 <> encode ann
-        Builtin  ann bn        -> encodeConstructorTag 7 <> encode ann <> encode bn
+        Var      ann n         -> eBits 4 0 <> encode ann <> encode n
+        Delay    ann t         -> eBits 4 1 <> encode ann <> encode t
+        LamAbs   ann n t       -> eBits 4 2 <> encode ann <> encode n <> encode t
+        Apply    ann t t'      -> eBits 4 3 <> encode ann <> encode t <> encode t'
+        Constant ann c         -> eBits 4 4 <> encode ann <> encode c
+        Force    ann t         -> eBits 4 5 <> encode ann <> encode t
+        Error    ann           -> eBits 4 6 <> encode ann
+        Builtin  ann bn        -> eBits 4 7 <> encode ann <> encode bn
 
-    decode = go =<< decodeConstructorTag
+    decode = go =<< dBEBits8 4
         where go 0 = Var      <$> decode <*> decode
               go 1 = Delay    <$> decode <*> decode
               go 2 = LamAbs   <$> decode <*> decode <*> decode
@@ -53,10 +44,20 @@ instance (Flat name) => Flat (Term name DefaultUni ()) where
               go 7 = Builtin  <$> decode <*> decode
               go _ = fail "Failed to decode Term TyName Name ()"
 
-instance Flat (Some (TypeIn DefaultUni)) where
-  encode (Some (TypeIn uni)) = encode . map (fromIntegral  :: Int -> Word) $ encodeUni uni
+    size t acc = case t of
+        Var      ann n         -> 4 + size ann 0 + size n acc
+        Delay    ann t         -> 4 + size ann 0 + size t acc
+        LamAbs   ann n t       -> 4 + size ann 0 + size n 0 + size t  acc
+        Apply    ann t t'      -> 4 + size ann 0 + size t 0 + size t' acc
+        Constant ann c         -> 4 + size ann 0 + size c acc
+        Force    ann t         -> 4 + size ann 0 + size t acc
+        Error    ann           -> 4 + size ann acc
+        Builtin  ann bn        -> 4 + size ann 0 + size bn acc
 
-  decode = go . decodeUni . map (fromIntegral :: Word -> Int) =<< decode where
+instance Flat (Some (TypeIn DefaultUni)) where
+  encode (Some (TypeIn uni)) = encode . (fromIntegral  :: Int -> Word) $ head (encodeUni uni)
+
+  decode = go . decodeUni . (\x -> [x]) . (fromIntegral :: Word -> Int) =<< decode where
     go Nothing    = fail "Failed to decode a universe"
     go (Just uni) = pure uni
 
@@ -73,7 +74,7 @@ instance Flat (Some (ValueOf DefaultUni)) where
                                     + bring (Proxy @Flat) uni (size x 0)
 
 instance Flat StaticBuiltinName where
-    encode = encodeConstructorTag . \case
+    encode = eBits 5 . \case
               AddInteger           -> 0
               SubtractInteger      -> 1
               MultiplyInteger      -> 2
@@ -97,7 +98,7 @@ instance Flat StaticBuiltinName where
               GtByteString         -> 20
               IfThenElse           -> 21
 
-    decode = go =<< decodeConstructorTag
+    decode = go =<< dBEBits8 5
         where go 0  = pure AddInteger
               go 1  = pure SubtractInteger
               go 2  = pure MultiplyInteger
@@ -122,6 +123,8 @@ instance Flat StaticBuiltinName where
               go 21 = pure IfThenElse
               go _  = fail "Failed to decode BuiltinName"
 
+    size _ n = n + 5
+
 instance Flat Unique where
     encode (Unique i) = eInt i
     decode = Unique <$> dInt
@@ -136,13 +139,16 @@ instance Flat DynamicBuiltinName where
     decode = DynamicBuiltinName <$> decode
 
 instance Flat BuiltinName where
-    encode (StaticBuiltinName bn) = encodeConstructorTag 0 <> encode bn
-    encode (DynBuiltinName   dbn) = encodeConstructorTag 1 <> encode dbn
+    encode (StaticBuiltinName bn) = eBits 1 0 <> encode bn
+    encode (DynBuiltinName   dbn) = eBits 1 1 <> encode dbn
 
-    decode = go =<< decodeConstructorTag
+    decode = go =<< dBEBits16 1
         where go 0 = StaticBuiltinName <$> decode
               go 1 = DynBuiltinName    <$> decode
               go _ = fail "Failed to decode Builtin ()"
+
+    size (StaticBuiltinName bn) n = 1 + size bn n
+    size (DynBuiltinName   dbn) n = 1 + size dbn n
 
 instance Flat NamedDeBruijn where
     encode (NamedDeBruijn _ i) = encode i
